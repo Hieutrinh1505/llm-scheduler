@@ -120,7 +120,7 @@ class AsyncNaiveScheduler:
                 for _, fut in batch:
                     if not fut.done():
                         fut.set_exception(e)
-
+    
     def run_batch(self, prompts: List[str]) -> List[str]:
         """
         Process a batch of prompts and return generated text.
