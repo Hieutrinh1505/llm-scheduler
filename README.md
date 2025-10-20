@@ -402,9 +402,6 @@ python benchmark_plot.py
 ## 📖 References
 
 - [vLLM Documentation](https://docs.vllm.ai/)
-- [PagedAttention Paper](https://arxiv.org/abs/2309.06180)
-- [Transformers Library](https://huggingface.co/docs/transformers)
-
 ---
 
 ## 🤝 Contributing
