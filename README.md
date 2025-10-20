@@ -6,6 +6,20 @@ Compare batch processing strategies, measure performance metrics (TTFT, throughp
 
 ---
 
+## 📖 Overview
+
+This benchmark suite tests three different scheduling approaches for LLM inference using **GPT-2** as the base model (configurable to any HuggingFace model). Built with **PyTorch** and **Transformers**, it measures real-world performance under varying loads (25, 50, 99+ requests).
+
+**What's tested:**
+- **Models**: GPT-2 (default), GPT-2-medium, GPT-2-large, TinyLlama, or any HuggingFace causal LM
+- **Hardware**: Automatic CPU/CUDA detection (optimized for GPU)
+- **Metrics**: Time to First Token (TTFT), throughput (tokens/sec), latency percentiles (P50/P95/P99)
+- **Workloads**: Variable request counts with async processing
+
+**Tech stack:** Python 3.11+ • PyTorch • Transformers • vLLM • AsyncIO • Matplotlib
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Clone and Setup
