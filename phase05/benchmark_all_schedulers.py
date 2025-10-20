@@ -223,10 +223,10 @@ async def main() -> None:
         "max_concurrent": 10,
         "batch_sizes": [2, 4, 8],
         "min_batch_size": 2,
-        "max_batch_size": 16,
+        "max_batch_size": 32,
         "timeout": 0.5,
         "max_time_wait": 2.0,
-        "memory_threshold": 0.3,
+        "memory_threshold": 0.9,
         "n_requests": [25, 50, 100],
         "scheduler_types": ["naive_scheduler", "dynamic_scheduler", "vllm_scheduler"],
     }

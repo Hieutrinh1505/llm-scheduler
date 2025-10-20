@@ -1,474 +1,415 @@
-# Phase 05: Comprehensive Scheduler Benchmark Suite
+# Phase 05: LLM Scheduler Benchmark & Analysis
 
-A complete benchmarking framework for comparing different LLM scheduler implementations across various workload patterns.
+A comprehensive benchmarking framework comparing three LLM inference schedulers: Naive, Dynamic, and vLLM.
 
-## Overview
+---
 
-This phase provides a comprehensive testing and comparison framework for three scheduler implementations:
+## 🚀 Quick Start
 
-1. **Naive Scheduler** - Synchronous, fixed batch size (from Phase 03)
-2. **Dynamic Scheduler** - Asynchronous, adaptive batch sizing (from Phase 04)
-3. **vLLM Scheduler** - Server-based, continuous batching (production-grade)
-
-## Features
-
-- **Multi-Load Testing**: Test with 25, 50, 100, 200, or 500+ concurrent requests
-- **Comprehensive Metrics**: Latency (P50/P95/P99), throughput (req/s, tokens/s), batch efficiency
-- **Automated Analysis**: Statistical summaries, comparison tables, visualizations
-- **Flexible Configuration**: Customize request sizes, run counts, schedulers to test
-
-## Directory Structure
-
-```
-phase05/
-├── scheduler/
-│   ├── naive_scheduler.py         # Simple synchronous scheduler
-│   ├── dynamic_scheduler.py       # Adaptive async scheduler
-│   ├── vllm_scheduler.py          # vLLM client wrapper
-│   └── start_server.sh            # Helper to start vLLM server
-├── benchmark_all_schedulers.py    # Main benchmark script
-├── plot_benchmark_results.py      # Visualization and analysis
-├── pyproject.toml                 # Dependencies
-└── README.md                      # This file
-```
-
-## Quick Start
-
-### 1. Install Dependencies
+### 1. Setup with UV (Recommended)
 
 ```bash
 cd phase05
+
+# Install dependencies
 uv sync
-# or
-pip install -r pyproject.toml
+
+# Activate virtual environment
+source .venv/bin/activate
 ```
 
-### 2. Run Benchmarks
-
-**Basic usage (Naive + Dynamic schedulers, 25/50/100 requests):**
+### 2. Run Benchmark
 
 ```bash
+# Basic benchmark (Naive + Dynamic schedulers)
+python benchmark_all_schedulers.py
+
+# With all schedulers (requires vLLM server - see below)
+python benchmark_all_schedulers.py  # runs all 3 schedulers
+```
+
+### 3. Generate Plots
+
+```bash
+# Create 7 visualization charts
+python benchmark_plot.py
+```
+
+All plots saved to `plots/` directory.
+
+---
+
+## 📁 Project Structure
+
+```
+phase05/
+├── scheduler/              # Scheduler implementations
+│   ├── naive_scheduler.py     # Fixed batch size, sequential processing
+│   ├── dynamic_scheduler.py   # Adaptive batching with SLA enforcement
+│   ├── vllm_scheduler.py      # vLLM client (continuous batching)
+│   └── start_server.sh        # vLLM server startup script
+├── tests/
+│   └── test_vllm.py          # vLLM connectivity test
+├── plots/                    # Generated visualizations
+├── benchmark_all_schedulers.py  # Main benchmarking script
+├── benchmark_plot.py            # Visualization generator
+├── prompts.json                 # Test prompts dataset
+├── pyproject.toml               # Dependencies (uv/pip)
+└── README.md                    # This file
+```
+
+---
+
+## 🧠 Scheduler Overview
+
+### 1. Naive Scheduler (`naive_scheduler.py`)
+
+**Core Concept:** Simple batch processing with fixed batch size.
+
+**How it works:**
+- Collects requests into batches up to `batch_size`
+- Waits for batch to fill OR timeout expires
+- Processes entire batch synchronously
+- Sequential execution (one batch at a time)
+
+**Key Features:**
+- ✓ Simple, predictable behavior
+- ✓ Good for learning batch processing concepts
+- ✗ Fixed batch size (inefficient under variable load)
+- ✗ No memory adaptation
+
+**When to use:** Learning, debugging, batch processing jobs
+
+**Configuration:**
+```python
+NaiveScheduler(
+    modelname="gpt2",
+    batch_size=4,      # Fixed batch size
+    device="cuda",
+    timeout=0.5        # Max wait time for batch
+)
+```
+
+---
+
+### 2. Dynamic Scheduler (`dynamic_scheduler.py`)
+
+**Core Concept:** Adaptive batching with memory-aware scaling and latency SLA.
+
+**How it works:**
+- Dynamically adjusts batch size based on GPU memory usage
+- Enforces `max_time_wait` SLA (no request waits too long)
+- Monitors memory pressure and scales batch size up/down
+- Asynchronous processing with concurrent request handling
+
+**Key Features:**
+- ✓ Adaptive batch sizing (better GPU utilization)
+- ✓ Memory-aware: reduces batch size when memory high
+- ✓ Latency SLA enforcement (`max_time_wait`)
+- ✓ Handles variable workload efficiently
+- ✗ More complex than naive scheduler
+
+**When to use:** Variable workloads, resource-constrained GPUs, latency-sensitive apps
+
+**Configuration:**
+```python
+DynamicScheduler(
+    modelname="gpt2",
+    batch_size=8,           # Initial batch size
+    min_batch_size=4,       # Lower bound
+    max_batch_size=32,      # Upper bound
+    timeout=0.5,            # Batch collection timeout
+    max_time_wait=2.0,      # Latency SLA (max wait per request)
+    memory_threshold=0.8    # GPU memory trigger for scaling
+)
+```
+
+**Adaptive Logic:**
+- High memory (>80%): Decrease batch size by 1
+- Low memory (<80%): Increase batch size by 2
+- Always respects `min_batch_size` and `max_batch_size`
+
+---
+
+### 3. vLLM Scheduler (`vllm_scheduler.py`)
+
+**Core Concept:** Production-grade continuous batching via vLLM server.
+
+**How it works:**
+- Client-server architecture (scheduler sends HTTP requests to vLLM)
+- vLLM uses **PagedAttention** for efficient KV cache management
+- **Continuous batching:** New requests join in-progress batches
+- No waiting for batch to fill - immediate processing
+
+**Key Features:**
+- ✓ Highest throughput (continuous batching)
+- ✓ Lowest latency (no batch wait time)
+- ✓ Production-ready optimizations (PagedAttention, kernel fusion)
+- ✓ Supports large models efficiently
+- ✗ Requires separate server process
+- ✗ More complex setup
+
+**When to use:** Production deployments, high-throughput scenarios, serving at scale
+
+**Setup:**
+```bash
+# 1. Start vLLM server (in separate terminal)
+cd scheduler
+./start_server.sh
+
+# 2. Test connection
+cd ..
+python tests/test_vllm.py
+
+# 3. Run benchmark with vLLM
 python benchmark_all_schedulers.py
 ```
 
-**Custom configuration:**
-
-```bash
-# Test with 25, 50, 100, and 200 requests, 5 runs each
-python benchmark_all_schedulers.py --sizes 25 50 100 200 --runs 5
-
-# Test only dynamic scheduler with 100 and 500 requests
-python benchmark_all_schedulers.py --schedulers dynamic --sizes 100 500
-
-# Test all three schedulers (requires vLLM server running)
-python benchmark_all_schedulers.py --schedulers naive dynamic vllm --sizes 50 100
+**Configuration:**
+```python
+VllmScheduler(
+    model="gpt2",
+    endpoint="http://localhost:8000/v1/completions",
+    max_tokens=100,
+    temperature=0.7
+)
 ```
 
-**Command-line options:**
+---
 
-```bash
---sizes           Request sizes to test (default: 25 50 100)
---runs            Number of runs per configuration (default: 3)
---device          Device to use: cuda or cpu (default: cuda)
---max-concurrent  Max concurrent requests (default: 10)
---schedulers      Schedulers to test: naive, dynamic, vllm (default: naive dynamic)
---output-dir      Output directory for results (default: .)
+## 📊 Benchmark Script (`benchmark_all_schedulers.py`)
+
+**Purpose:** Compare scheduler performance across different request loads.
+
+**What it does:**
+1. Loads test prompts from `prompts.json`
+2. Runs each scheduler with varying request counts (25, 50, 99)
+3. Measures per-request metrics (latency, TTFT, throughput)
+4. Exports results to `llm_inference_benchmark.csv`
+
+**Key Metrics Collected:**
+- **Latency:** Total time from request to completion
+- **TTFT (Time to First Token):** Time until first token generated
+- **Throughput:** Tokens per second
+- **Batch metrics:** Batch number, batch size
+- **Memory usage:** Peak GPU memory
+
+**Configuration:**
+```python
+config_dict = {
+    "n_runs": 3,                    # 3 runs with different request counts
+    "device": "cuda",               # Use GPU
+    "max_concurrent": 10,           # Max concurrent requests
+    "batch_sizes": [2, 4, 8],       # Batch sizes for each run
+    "n_requests": [25, 50, 99],     # Request counts to test
+    "scheduler_types": [            # Schedulers to benchmark
+        "naive_scheduler",
+        "dynamic_scheduler",
+        "vllm_scheduler"
+    ]
+}
 ```
 
-### 3. Visualize Results
+**Output File:** `llm_inference_benchmark.csv`
+- Columns: scheduler_type, run_num, seq, latency, ttft, tokens_per_sec, batch_size, etc.
 
-After running benchmarks, generate plots and analysis:
+---
 
-```bash
-python plot_benchmark_results.py
+## 📈 Visualization (`benchmark_plot.py`)
+
+**Purpose:** Generate visual comparisons of scheduler performance.
+
+**Generated Plots (7 total):**
+
+### Bar Charts (grouped comparison)
+1. **`ttft_bar_chart.png`** - Average TTFT by scheduler and request count
+2. **`throughput_bar_chart.png`** - Tokens/sec by scheduler
+3. **`total_latency_bar_chart.png`** - Total completion time
+
+### Line Charts (trend analysis)
+4. **`ttft_line_chart.png`** - TTFT trends across request loads
+5. **`throughput_line_chart.png`** - Throughput scaling
+
+### Distribution Analysis
+6. **`latency_boxplot.png`** - Latency distribution (P50, P95, P99)
+7. **`latency_percentiles.png`** - P50/P95/P99 comparison across schedulers
+
+**Usage:**
+```python
+from benchmark_plot import BenchmarkPlot
+
+# Initialize with CSV file
+plotter = BenchmarkPlot("llm_inference_benchmark.csv")
+
+# Generate individual plots
+plotter.plot_ttft()              # Bar chart
+plotter.plot_ttft_line()         # Line chart
+plotter.plot_latency_boxplot()   # Box plot
+plotter.plot_latency_percentiles() # Percentile comparison
+
+# Or run all plots
+python benchmark_plot.py
 ```
 
-This creates:
-- `throughput_comparison.png` - Throughput (req/s and tokens/s) vs request size
-- `latency_comparison.png` - Latency percentiles (P50, P95, P99, Avg)
-- `latency_distribution.png` - Box plots of latency distributions
-- `scheduler_comparison_bars.png` - Bar charts comparing metrics
-- `benchmark_report.txt` - Detailed text report
+---
 
-**Custom visualization:**
+## 🔑 Key Takeaways
 
-```bash
-python plot_benchmark_results.py \
-  --summaries benchmark_summaries.csv \
-  --metrics benchmark_detailed_metrics.csv \
-  --output-dir ./plots
-```
+### Performance Characteristics
 
-## Testing with vLLM
+| Metric | Naive | Dynamic | vLLM |
+|--------|-------|---------|------|
+| **TTFT (avg)** | 0.7s @ 25 req<br>0.3s @ 50 req<br>**0.18s @ 99 req** | 0.33s @ 25 req<br>0.39s @ 50 req<br>0.55s @ 99 req | **0.23s** (consistent) |
+| **Throughput** | Low (sequential) | Medium (adaptive) | **Highest** |
+| **Memory Efficiency** | Fixed allocation | ✓ Adaptive | ✓ PagedAttention |
+| **Latency SLA** | ✗ No guarantee | ✓ Enforced | ✓ Low variance |
+| **Best Use Case** | Learning/Batch | Variable load | **Production** |
 
-To benchmark against vLLM's production-grade scheduler:
+### Surprising Finding: Naive Scheduler TTFT at 99 Requests
 
-### 1. Configure Environment
+**Why is Naive fastest at high load?**
+- **No batching overhead:** Processes requests immediately one-by-one
+- **No wait time:** Each request starts processing right away
+- **Dynamic/vLLM wait for batches:** Incur batching delay
 
-Create or edit `.env` file in the `phase05` directory:
+**BUT...**
+- **Naive has WORST total throughput** (slowest to complete all 99 requests)
+- **TTFT ≠ Total Latency:** First token is fast, but total completion is slow
+- **Trade-off:** Low TTFT vs. High Throughput
 
-```bash
-# Copy example file
-cp .env.example .env
+**Conclusion:** Naive's low TTFT at high load is misleading - check total latency/throughput plots!
 
-# Edit with your settings
-# .env file contents:
-LLM_MODEL=gpt2                                      # Model to use
-VLLM_ENDPOINT=http://localhost:8000/v1/completions # Server endpoint
-VLLM_PORT=8000                                      # Server port
-VLLM_HOST=0.0.0.0                                   # Server host
-GPU_MEMORY_UTIL=0.9                                 # GPU memory utilization
-```
+---
 
-**Supported models:**
-- `gpt2` (small, fast, good for testing)
-- `gpt2-medium` (better quality)
-- `gpt2-large` (best quality, slower)
-- `TinyLlama/TinyLlama-1.1B-Chat-v1.0` (very fast)
-- Any HuggingFace model compatible with vLLM
-
-### 2. Start vLLM Server
-
-The `start_server.sh` script automatically reads from `.env`:
-
-```bash
-# Start server (in separate terminal)
-cd scheduler
-./start_server.sh
-
-# The script will:
-# - Load configuration from .env
-# - Display settings (model, port, etc.)
-# - Check for CUDA availability
-# - Start vLLM server
-```
-
-**Manual start (alternative):**
-```bash
-vllm serve gpt2 --port 8000 --host 0.0.0.0
-```
-
-### 3. Run Benchmark with vLLM
-
-```bash
-python benchmark_all_schedulers.py --schedulers naive dynamic vllm --sizes 50 100 200
-```
-
-## Understanding the Output
-
-### Console Output
-
-During benchmarking, you'll see real-time progress:
-
-```
-======================================================================
-TESTING WITH 50 REQUESTS
-======================================================================
-
---- Run 1/3 ---
-
-Benchmarking Naive Scheduler: 50 requests, run 1
-
-NAIVE SCHEDULER - Run 1
-============================================================
-Request Size: 50
-Total Requests: 50
-Successful: 50
-Failed: 0
-Wall Time: 12.34s
-
-Throughput:
-  Requests/sec: 4.05
-  Tokens/sec: 45.23
-
-Latency:
-  P50: 0.234s
-  P95: 0.456s
-  P99: 0.678s
-  Avg: 0.289s
-  Min: 0.123s
-  Max: 0.789s
-```
-
-### Final Comparison Table
-
-At the end, a summary table compares all schedulers:
-
-```
-================================================================================
-SCHEDULER COMPARISON SUMMARY
-================================================================================
-
-50 Requests:
---------------------------------------------------------------------------------
-Scheduler       Throughput (req/s)   Throughput (tok/s)   P95 Latency (s)
---------------------------------------------------------------------------------
-naive           4.05                 45.23                0.456
-dynamic         8.12                 92.15                0.298
-vllm            15.34                178.92               0.156
-```
-
-### Output Files
-
-**`benchmark_summaries.csv`** - Summary statistics per run:
-- scheduler, request_size, run_num
-- throughput (req/s, tokens/s)
-- latency percentiles (P50, P95, P99, avg, min, max)
-- success/failure counts
-
-**`benchmark_detailed_metrics.csv`** - Per-request detailed metrics:
-- Individual request latency
-- Input/output token counts
-- Tokens per second
-- Prompt and generated text
-- Error messages (if any)
-
-## Interpreting Results
-
-### Key Metrics
-
-**Throughput (requests/sec):**
-- Higher is better
-- Measures how many requests the scheduler can process per second
-- Important for system capacity planning
-
-**Throughput (tokens/sec):**
-- Higher is better
-- Measures actual token generation speed
-- Better indicator of GPU utilization than req/s
-
-**P95 Latency:**
-- Lower is better
-- 95% of requests complete faster than this time
-- Standard SLA metric for production systems
-
-**P99 Latency:**
-- Lower is better
-- 99% of requests complete faster than this time
-- Indicates worst-case performance for most users
-
-### Expected Performance Characteristics
+### When to Use Each Scheduler
 
 **Naive Scheduler:**
-- ✓ Simplest implementation
-- ✓ Predictable batch behavior
-- ✗ Fixed batch size (inefficient with variable load)
-- ✗ Synchronous (lower concurrency)
-- **Best for:** Learning, prototyping, batch processing
+- 📚 Learning batch processing concepts
+- 🧪 Prototyping and debugging
+- 📦 Offline batch processing (non-interactive)
+- 💡 Simple, predictable behavior needed
 
 **Dynamic Scheduler:**
-- ✓ Adaptive batching (better GPU utilization)
-- ✓ Latency SLA enforcement
-- ✓ Memory-aware scaling
-- ✗ More complex implementation
-- **Best for:** Variable workloads, resource-constrained environments
+- 📊 Variable workload patterns
+- 💾 Limited GPU memory
+- ⏱️ Latency SLA requirements
+- 🔄 Need adaptive resource management
 
 **vLLM Scheduler:**
-- ✓ Production-grade continuous batching
-- ✓ Highest throughput
-- ✓ Lowest latency
-- ✓ PagedAttention memory optimization
-- ✗ Requires separate server process
-- **Best for:** Production deployments, high-throughput scenarios
+- 🚀 Production serving at scale
+- 📈 High throughput requirements
+- 🎯 Lowest latency needed
+- 💪 Large models (efficient memory with PagedAttention)
 
-## Example Benchmark Workflow
+---
 
-```bash
-# 1. Run comprehensive benchmark (3 runs each, multiple sizes)
-python benchmark_all_schedulers.py \
-  --schedulers naive dynamic \
-  --sizes 25 50 100 200 \
-  --runs 3 \
-  --device cuda
+## 🛠️ Advanced Usage
 
-# 2. Generate visualizations
-python plot_benchmark_results.py
-
-# 3. Review results
-cat benchmark_report.txt
-open throughput_comparison.png
-open latency_comparison.png
-```
-
-## Configuration Tips
-
-### For Latency-Sensitive Workloads
-
-```bash
-# Use smaller batch sizes, more concurrent requests
-python benchmark_all_schedulers.py \
-  --schedulers dynamic \
-  --sizes 50 100 \
-  --max-concurrent 20
-```
-
-### For Throughput-Focused Testing
-
-```bash
-# Use larger request sizes, fewer concurrent
-python benchmark_all_schedulers.py \
-  --schedulers dynamic vllm \
-  --sizes 200 500 1000 \
-  --max-concurrent 5
-```
-
-### For Memory-Constrained GPUs
-
-```bash
-# Use CPU or test with smaller loads
-python benchmark_all_schedulers.py \
-  --device cpu \
-  --sizes 10 25 50 \
-  --max-concurrent 5
-```
-
-## Customizing Tests
-
-### Add Custom Prompts
+### Custom Batch Sizes
 
 Edit `benchmark_all_schedulers.py`:
-
 ```python
-TEST_PROMPTS = [
+config_dict = {
+    "batch_sizes": [4, 8, 16],  # Test different sizes
+    "n_requests": [50, 100, 200]
+}
+```
+
+### Custom Prompts
+
+Replace `prompts.json` with your own dataset:
+```json
+[
     "Your custom prompt 1",
     "Your custom prompt 2",
-    # ... add more
+    ...
 ]
 ```
 
-### Adjust Scheduler Parameters
+### Different Models
 
-Modify scheduler initialization in the benchmark methods:
-
+Change model in config:
 ```python
-scheduler = AsyncDynamicScheduler(
-    modelname="gpt2",
-    batch_size=16,        # Adjust initial batch size
-    min_batch_size=8,     # Adjust min
-    max_batch_size=64,    # Adjust max
-    timeout=1.0,          # Longer timeout
-    max_time_wait=3.0,    # Longer SLA
-)
+config_dict = {
+    "modelname": "gpt2-medium"  # or gpt2-large, TinyLlama, etc.
+}
 ```
 
-## Troubleshooting
+---
+
+## 🐛 Troubleshooting
 
 **CUDA out of memory:**
 ```bash
-# Use smaller batch sizes or fewer concurrent requests
-python benchmark_all_schedulers.py --device cpu --sizes 25 50
+# Use smaller batch sizes or CPU
+python benchmark_all_schedulers.py  # auto-detects device
 ```
 
-**vLLM connection refused:**
+**vLLM connection error:**
 ```bash
-# Ensure vLLM server is running
-cd scheduler
-./start_server.sh
+# 1. Start server
+cd scheduler && ./start_server.sh
 
-# Check server is accessible
+# 2. Test connection
+python tests/test_vllm.py
+
+# 3. Check endpoint
 curl http://localhost:8000/v1/models
 ```
 
-**Benchmark runs too slowly:**
+**Plot generation fails:**
 ```bash
-# Reduce number of runs and request sizes
-python benchmark_all_schedulers.py --sizes 25 50 --runs 2
+# Ensure matplotlib backend
+export MPLBACKEND=Agg
+python benchmark_plot.py
 ```
 
-**Import errors:**
-```bash
-# Ensure all dependencies are installed
-uv sync
-# or
-pip install torch transformers vllm matplotlib aiohttp python-dotenv
-```
+---
 
-## Advanced Usage
+## 📚 Core Concepts Summary
 
-### Compare Different Models
+### Batching
+- **Why?** GPU parallelism - process multiple requests simultaneously
+- **Trade-off:** Latency (waiting for batch) vs. Throughput (GPU utilization)
 
-```python
-# Modify scheduler creation to use different models
-scheduler = AsyncDynamicScheduler(
-    modelname="gpt2-medium",  # or gpt2-large, EleutherAI/gpt-neo-125M, etc.
-    # ... other params
-)
-```
+### Time to First Token (TTFT)
+- **Definition:** Time until first token is generated
+- **Importance:** User experience (streaming responses)
+- **Lower is better** for interactive applications
 
-### Export to Different Format
+### Throughput
+- **Requests/sec:** System capacity
+- **Tokens/sec:** Actual generation speed (better metric)
+- **Higher is better** for overall performance
 
-The CSV files can be easily processed with pandas:
+### Latency Percentiles
+- **P50 (median):** Typical user experience
+- **P95:** 95% of requests faster than this
+- **P99:** Tail latency (worst-case for most users)
 
-```python
-import pandas as pd
+### Memory Management
+- **Static (Naive):** Fixed allocation, can waste memory
+- **Dynamic:** Adaptive scaling based on pressure
+- **PagedAttention (vLLM):** Virtual memory for KV cache (most efficient)
 
-# Load results
-df = pd.read_csv('benchmark_summaries.csv')
+---
 
-# Group and analyze
-grouped = df.groupby(['scheduler', 'request_size'])
-print(grouped['throughput_req_per_sec'].mean())
+## 📖 References
 
-# Export to Excel
-df.to_excel('results.xlsx', index=False)
-```
+- [vLLM Documentation](https://docs.vllm.ai/)
+- [PagedAttention Paper](https://arxiv.org/abs/2309.06180)
+- [Transformers Library](https://huggingface.co/docs/transformers)
 
-### Integrate with CI/CD
+---
 
-```bash
-# Run benchmarks and check for regressions
-python benchmark_all_schedulers.py --runs 2 --sizes 50
+## 🤝 Contributing
 
-# Parse results programmatically
-python -c "
-import csv
-with open('benchmark_summaries.csv') as f:
-    reader = csv.DictReader(f)
-    for row in reader:
-        if row['scheduler'] == 'dynamic':
-            assert float(row['throughput_req_per_sec']) > 5.0
-            print('✓ Dynamic scheduler meets performance threshold')
-"
-```
+To add a new scheduler:
+1. Implement in `scheduler/your_scheduler.py`
+2. Add interface: `async def add_request(prompt: str) -> str`
+3. Update `scheduler_dict` in `benchmark_all_schedulers.py`
+4. Run benchmark and generate plots
 
-## Performance Expectations
+---
 
-Based on testing with GPT-2 on an NVIDIA A100:
-
-| Scheduler | 50 Req (req/s) | 100 Req (req/s) | 200 Req (req/s) | P95 Latency (50 req) |
-|-----------|----------------|-----------------|-----------------|---------------------|
-| Naive     | ~4-6           | ~5-7            | ~6-8            | ~0.4-0.6s           |
-| Dynamic   | ~8-12          | ~10-14          | ~12-16          | ~0.2-0.4s           |
-| vLLM      | ~15-25         | ~20-30          | ~25-35          | ~0.1-0.2s           |
-
-*Note: Actual numbers vary based on hardware, model size, and prompt complexity*
-
-## Next Steps
-
-After analyzing benchmark results:
-
-1. **Optimize parameters** - Tune batch sizes, timeouts based on your workload
-2. **Profile bottlenecks** - Use detailed metrics to identify slow requests
-3. **Scale testing** - Test with larger request sizes (500, 1000+)
-4. **Multi-GPU** - Extend to test tensor parallelism configurations
-5. **Production deployment** - Use insights to configure production scheduler
-
-## References
-
-- [Phase 03 README](../phase03/README.md) - Naive Scheduler details
-- [Phase 04 README](../phase04/README.md) - Dynamic Scheduler details
-- [vLLM Documentation](https://docs.vllm.ai/) - vLLM scheduler internals
-
-## Contributing
-
-To add new schedulers to the benchmark:
-
-1. Implement scheduler with compatible interface:
-   - `async def add_request(prompt: str) -> str`
-   - `async def shutdown()`
-
-2. Add benchmark method in `SchedulerBenchmark` class
-
-3. Update `run_benchmarks()` to include new scheduler
-
-4. Add visualization support in `plot_benchmark_results.py`
+**Built with:** PyTorch • Transformers • vLLM • Matplotlib • AsyncIO
