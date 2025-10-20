@@ -1,0 +1,20 @@
+[project]
+name = "phase05"
+version = "0.1.0"
+description = "Comprehensive LLM Scheduler Benchmark Suite"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.9.0",
+    "black>=25.9.0",
+    "matplotlib>=3.10.6",
+    "nvidia-ml-py3>=7.352.0",
+    "openai>=1.109.0",
+    "pandas>=2.3.3",
+    "python-dotenv>=1.0.0",
+    "torch",
+    "torchaudio",
+    "torchvision",
+    "transformers>=4.56.2",
+    "vllm>=0.10.2",
+]
